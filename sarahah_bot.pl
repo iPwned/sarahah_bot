@@ -3,11 +3,12 @@
 use strict;
 use warnings;
 use WWW::Curl::Easy;
-use Data::Dumper;
+use WWW::Curl::Form;
 
 {
 	my $curl = WWW::Curl::Easy->new;
 	my $user = shift;
+	my $message=shift;
 	my ($respHeaders, $respBody, $respCode, $retCode);
 	my (@splitHeaders,@lines);
 	my %cookies;
@@ -52,13 +53,48 @@ use Data::Dumper;
 				$verificationToken=$1;
 			}
 		}
-		print "user id=$userId\n";
-		print "verification token=$verificationToken\n";
 	}
 	else
 	{
 		print "curl error $retCode not handled\n";
 		exit 1;
+	}
+
+	my $cookieString='Cookie:';
+	foreach my $key(keys %cookies)
+	{
+		$cookieString .= " $key=$cookies{$key};";
+	}
+	$cookieString =~ s/;$//;
+
+	my $curlForm=WWW::Curl::Form->new;
+	$curlForm->formadd('__RequestVerificationToken', $verificationToken);
+	$curlForm->formadd('userId', $userId);
+	$curlForm->formadd('text', $message);
+
+	$curl=WWW::Curl::Easy->new; #create a new handle for the post.
+	$curl->setopt(CURLOPT_URL,"https://$user.sarahah.com/Messages/SendMessage");
+	$curl->setopt(CURLOPT_WRITEDATA, \$respBody);
+	$curl->setopt(CURLOPT_HEADERDATA, \$respHeaders);
+	$curl->setopt(CURLOPT_HTTPHEADER, [$cookieString, "Origin: https://$user.sarahah.com", 
+		'Accept: */*', "Referer: https://$user.sarahah.com/", 'X-Requested-With: XMLHttpRequest']);
+	$curl->setopt(CURLOPT_POST,1);
+	$curl->setopt(CURLOPT_HTTPPOST,$curlForm);
+	$retCode = $curl->perform;
+
+	if($retCode == 0)
+	{
+		$respCode=$curl->getinfo(CURLINFO_HTTP_CODE);
+		if($respCode != 200)
+		{
+			print "Unhandled HTTP $respCode\n";
+			print "Response Headers:\n$respHeaders\n";
+		}
+
+	}
+	else
+	{
+		print "curl error $retCode not handled\n"
 	}
 }
 
